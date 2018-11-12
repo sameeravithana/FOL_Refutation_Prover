@@ -1,5 +1,7 @@
 import random
 import re
+import itertools
+import time
 
 OPS = ["IF", "AND", "OR", "NOT", "IMPLIES"]
 QUANTS = ["FORALL", "EXISTS"]
@@ -115,7 +117,6 @@ def standardize(FOL_Tree, variable_names={}):
         _child_symbol_type = _child_node.get_element_type()
         _child_symbol_value = _child_node.get_element_value()
 
-        ##print(_child_node.get_text())
         variable_names[_child_symbol_value] = _child_symbol_value + "_" + str(random.randint(0, 10000))
 
         _child_node.set_node(_child_symbol_type, variable_names[_child_symbol_value])
@@ -123,9 +124,6 @@ def standardize(FOL_Tree, variable_names={}):
         _child_nodes[-1] = _child_node
 
     elif _symbol_type == "function" or _symbol_type == "predicate":
-        ##print(variable_names)
-        ##_child_node=_child_nodes[-1]
-
         for i in range(len(_child_nodes)):
 
             _child_node = _child_nodes[i]
@@ -137,14 +135,13 @@ def standardize(FOL_Tree, variable_names={}):
 
             _child_nodes[i] = _child_node
 
-    ##print(variable_names)
     FOL_Tree.set_child_nodes(_child_nodes)
 
-    ##_child_nodes=FOL_Tree.get_child_nodes()
     for i in range(len(_child_nodes)):
         standardize(_child_nodes[i], variable_names)
 
     return FOL_Tree
+
 
 def recorrect(FOL_Tree):
     _symbol_type = FOL_Tree.get_element_type()
@@ -182,6 +179,178 @@ def recorrect(FOL_Tree):
     FOL_Tree.set_child_nodes(_child_nodes)
 
     return FOL_Tree
+
+def isCNF(FOL_Tree):
+    _symbol_type = FOL_Tree.get_element_type()
+    _symbol_value = FOL_Tree.get_element_value()
+
+    _child_nodes = FOL_Tree.get_child_nodes()
+
+    if (_symbol_type == "op" and _symbol_value == "AND"):
+
+        for i in range(len(_child_nodes)):
+            _child_node=_child_nodes[i]
+
+            _child_node_symbol_type = _child_node.get_element_type()
+            _child_node_symbol_value = _child_node.get_element_value()
+
+            if not (_child_node_symbol_type == "op" and _child_node_symbol_value == "OR"):
+                return False
+
+            _child_child_nodes =_child_node.get_child_nodes()
+
+            for i in range(len(_child_child_nodes)):
+                _child_child_node = _child_child_nodes[i]
+
+                _child_child_node_symbol_type = _child_child_node.get_element_type()
+                _child_child_node_symbol_value = _child_child_node.get_element_value()
+
+                if (_child_child_node_symbol_type == "op" and (_child_child_node_symbol_value == "AND" or _child_child_node_symbol_value == "OR")):
+                    return False
+
+
+
+    else:
+        return False
+
+    return True
+
+def isClause(FOL_Tree):
+    _symbol_type = FOL_Tree.get_element_type()
+    _symbol_value = FOL_Tree.get_element_value()
+
+    _child_nodes = FOL_Tree.get_child_nodes()
+
+    if (_symbol_type == "op" and _symbol_value == "OR"):
+        for i in range(len(_child_nodes)):
+            _child_node = _child_nodes[i]
+
+            _child_node_symbol_type = _child_node.get_element_type()
+            _child_node_symbol_value = _child_node.get_element_value()
+
+            if _child_node_symbol_type == "op" and _child_node_symbol_value == "NOT":
+                continue;
+
+            elif _child_node_symbol_type == "predicate":
+                continue;
+
+            else:
+                return False
+
+    else:
+        return False
+
+    return True
+
+def isLiteral(FOL_Tree):
+    _symbol_type = FOL_Tree.get_element_type()
+    _symbol_value = FOL_Tree.get_element_value()
+
+    _child_nodes = FOL_Tree.get_child_nodes()
+
+    if (_symbol_type == "op" and _symbol_value == "NOT"):
+        _child_node = _child_nodes[0]
+
+        _child_node_symbol_type = _child_node.get_element_type()
+        _child_node_symbol_value = _child_node.get_element_value()
+
+        if _child_node_symbol_type == "predicate":
+            return True
+
+    if _symbol_type == "predicate":
+        return True
+
+    return False
+
+
+
+def concatenate(node_tuple):
+    _new_children=[]
+    for node in node_tuple:
+        _new_children.extend(node.get_child_nodes())
+
+    parent=Node("op","OR")
+    parent.set_child_nodes(_new_children)
+    return parent
+
+
+def convertToCNF(FOL_Tree):
+    _symbol_type = FOL_Tree.get_element_type()
+    _symbol_value = FOL_Tree.get_element_value()
+
+    _child_nodes = FOL_Tree.get_child_nodes()
+    _no_child_nodes=len(_child_nodes)
+
+    ## CNF check
+    if isCNF(FOL_Tree):
+        return FOL_Tree
+
+    ## clause
+    if isClause(FOL_Tree):
+        _new_FOL_Tree = Node("op", "AND")
+        _new_FOL_Tree.set_child_nodes([FOL_Tree])
+
+        return _new_FOL_Tree
+
+
+    ## Literal
+    if isLiteral(FOL_Tree):
+        _new_FOL_Tree = Node("op", "AND")
+
+        _new_parent_node=Node("op", "OR")
+        _new_parent_node.set_child_nodes([FOL_Tree])
+
+        _new_FOL_Tree.set_child_nodes([_new_parent_node])
+
+        return _new_FOL_Tree
+
+
+
+    if _symbol_type == "op" and _symbol_value == "AND" and _no_child_nodes>0:
+        _new_children=[]
+        for i in range(len(_child_nodes)):
+            _child_node =_child_nodes[i]
+            X_Tree = convertToCNF(_child_node)
+            x_child_nodes = X_Tree.get_child_nodes()
+            for x_child_node in x_child_nodes:
+                _new_children.append(x_child_node)
+
+        _new_FOL_Tree=Node("op", "AND")
+        _new_FOL_Tree.set_child_nodes(_new_children)
+
+        return _new_FOL_Tree
+
+    if _symbol_type == "op" and _symbol_value == "OR" and _no_child_nodes > 0:
+        _new_children = []
+        for i in range(len(_child_nodes)):
+            _child_node = _child_nodes[i]
+
+
+            X_Tree = convertToCNF(_child_node)
+
+            x_child_nodes=X_Tree.get_child_nodes()
+            _x_children=[]
+            for x_child_node in x_child_nodes:
+                _x_children.append(x_child_node)
+
+            _new_children.append(_x_children)
+
+        _new_combined_children=list(itertools.product(*_new_children))
+
+        _new_x_children=[]
+        for node_tuple in _new_combined_children:
+            _new_x_node=concatenate(node_tuple)
+            _new_x_children.append(_new_x_node)
+
+
+        _new_FOL_Tree = Node("op", "AND")
+        _new_FOL_Tree.set_child_nodes(_new_x_children)
+
+        return _new_FOL_Tree
+
+    else:
+        print("Error.")
+
 
 
 class Node:
@@ -226,7 +395,6 @@ def printTree(node):
 def parse_tree(args):
     _stack = []
 
-    ##(FORALL x (IMPLIES (P x) (Q x)))
     _stack_element = None
     for index in range(len(args)):
         current_index = index
@@ -263,9 +431,6 @@ def parse_tree(args):
             _node = Node(current_symbol_type, current_symbol_value)
             _stack.append(_node)
 
-            ##print(current_element,_stack)
-
-    #print("stack size: %d" % len(_stack))
     assert (len(_stack) == 1)
 
     return _stack.pop()
@@ -273,14 +438,13 @@ def parse_tree(args):
 
 def parse(F):
     characters = F
-
-    ## breaking the input to argument types
-    ## argument types: open and close bracket, operator and symbol
+    # breaking the input to argument types
+    # argument types: open and close bracket, operator and symbol
     args = []
 
     regex = r'''\(|\)|\[|\]|\-?\d+\.\d+|\-?\d+|[^,(^)\s]+'''
 
-    ## sanitizing the input
+    # sanitizing the input
     characters = characters.replace("\t", " ")
     characters = characters.replace("\n", " ")
     characters = characters.replace("\r", " ")
@@ -317,143 +481,84 @@ def parse(F):
 
         arg_tuple = (arg_name, arg)
         args.append(arg_tuple)
-    ##prev_arg_name = arg_name
-    
-    return args
 
-    #print(args)
-
-    ## Tree parser for S-expression
-
-    ##FOL_Tree = parse_tree(args)
-    #print(FOL_Tree)
-
-    ## recorrecting predicates
-    ##FOL_Tree = recorrect(FOL_Tree)
-
-    #FOL_Tree = parse_tree(args)
-    #print(FOL_Tree)
-
-    ## recorrecting predicates
-    #FOL_Tree = recorrect(FOL_Tree)
-
-    #print(FOL_Tree)
-
-    ## removing conditionals
-    ##FOL_Tree = remove_conditionals(FOL_Tree)
-    #print(FOL_Tree)
-
-
-    ## deMorgan
-    ##FOL_Tree = deMorgan(FOL_Tree)
-    #print(FOL_Tree)
-
-    ## standardization
-    #FOL_Tree = standardize(FOL_Tree)
-
-    ##print(FOL_Tree)
+    return parse_tree(args)
 
 ##################################################################################
+
 def findIncSet(F):
     result = []
     for i in range(0, len(F)):
-        F[i] = algorithm(F[i])
-        if F[i] == "Inconsistent":
-            result.append(i)
+        try:
+            F[i] = algorithm(F[i])
+            if F[i]:
+                result.append(i)
+        except BaseException:
+            continue
+
     return result
 
 def algorithm(L):
+    clauses = list()
     for i in range(0, len(L)):
-        L[i] = parse(L[i])
-        L[i] = parse_tree(L[i])
-        L[i] = recorrect(L[i])
-        L[i] = remove_conditionals(L[i])
-        L[i] = deMorgan(L[i])
-    
-    standardize(FOL_Tree,variable_names)
+        FOL_Tree = parse(L[i])
+        FOL_Tree = recorrect(FOL_Tree)
+        FOL_Tree = remove_conditionals(FOL_Tree)
+        FOL_Tree = deMorgan(FOL_Tree)
+        FOL_Tree = doubleNOT(FOL_Tree)
+        FOL_Tree = standardize(FOL_Tree)
+        FOL_Tree = prenex_form(FOL_Tree)
+        FOL_Tree = skolemize(FOL_Tree)
+        FOL_Tree = drop_universal(FOL_Tree)
+        FOL_Tree = symbol_fixer(FOL_Tree)
+        FOL_Tree = convertToCNF(FOL_Tree)
 
-    for i in range(0, len(L)):
-        L[i] = prenex_form(L[i])
-        L[i] = skolemize(L[i])
-        L[i] = drop_universal(L[i])
-        L[i] = convert_CNF(L[i])
+        predicates = and_to_clausal(FOL_Tree)
+        clauses.append(predicates)
 
-    #clausal form function
-    
-    #unification & resolution functions
+    return resolution(clauses)
 
-prenex = True
-def prenex_form(FOL_Tree): #This function checks if its already in prenex form, if not it passes it to a converter. 
-    #Prenex form is pushing all the quantifiers up as far as possible. 
-    _symbol_type = FOL_Tree.get_element_type()
-    _symbol_value = FOL_Tree.get_element_value()
 
-    _child_nodes = FOL_Tree.get_child_nodes()
-    _child_symbol_type = _child_node.get_element_type()
-    if _symbol_type != "quant" and _child_symbol_type == "quant":
-        prenex = False
-
-    for i in range(len(_child_nodes)):
-        prenex_form(_child_nodes[i])
-
-    if prenex == True:
+def doubleNOT(FOL_Tree):
+    currentNode = FOL_Tree
+    _symbol_value = currentNode.get_element_value()
+    if len(currentNode.get_child_nodes()) == 0:
         return FOL_Tree
-    else: 
-        return prenex_convert(FOL_Tree)
 
-def prenex_convert(FOL_Tree):
-=======
-    #print(FOL_Tree)
+    if _symbol_value == "NOT": #if current is NOT
+        child = currentNode.get_child_nodes()
+        child_value = child[0].get_element_value()
+        if child_value == "NOT": #if child is also not, set current to its child
+            currentNode.set_node(currentNode.get_child_nodes()[0].get_child_nodes()[0].get_element_type(), currentNode.get_child_nodes()[0].get_child_nodes()[0].get_element_value())
 
-    ## prenex 
-    #FOL_Tree = prenex_form(FOL_Tree)
-    #print(FOL_Tree)
+            if len(currentNode.get_child_nodes()[0].get_child_nodes()[0].get_child_nodes()) == 2:
+                currentNode.get_child_nodes()[1] = currentNode.get_child_nodes()[0].get_child_nodes()[0].get_child_nodes()[1]
 
-##################################################################################
-def findIncSet(F):
-    result = []
-    for i in range(0, len(F)):
-        F[i] = algorithm(F[i])
-        if F[i] == "Inconsistent":
-            result.append(i)
-    return result
+            currentNode.get_child_nodes()[0] = currentNode.get_child_nodes()[0].get_child_nodes()[0].get_child_nodes()[0]
+            
+            doubleNOT(currentNode)
 
-def algorithm(L):
-    for i in range(0, len(L)):
-        L[i] = parse(L[i])
-        L[i] = parse_tree(L[i])
-        L[i] = recorrect(L[i])
-        L[i] = remove_conditionals(L[i])
-        L[i] = deMorgan(L[i])
-        L[i] = standardize(L[i])
-        L[i] = prenex_form(L[i])
-        L[i] = skolemize(L[i])
-        L[i] = drop_universal(L[i])
-        #L[i] = convert_CNF(L[i])
-        print(L[i])
-        print("Done")
+        
+    if len(currentNode.get_child_nodes()) == 2:
+        doubleNOT(currentNode.get_child_nodes()[1])
 
-    #clausal form function
-    
-    #unification & resolution functions
+    doubleNOT(currentNode.get_child_nodes()[0])
 
-    # Returning L
-    return L
+    return FOL_Tree
 
-############### PRENEX CODE START ###################      
-prenex = True
-def prenex_form(FOL_Tree): #This function checks if its already in prenex form, if not it passes it to a converter. 
-    #Prenex form is pushing all the quantifiers up as far as possible. 
+############### PRENEX CODE START ###################
+# This function checks if its already in prenex form, if not it passes it to a converter.
+def prenex_form(FOL_Tree):
+    # Prenex form is pushing all the quantifiers up as far as possible.
     if_prenex = prenex_check(FOL_Tree)
 
-    if if_prenex == True:
+    if if_prenex:
         return FOL_Tree
     else: 
         FOL_Tree = prenex_convert(FOL_Tree)
         return prenex_form(FOL_Tree)
 
 def prenex_check(FOL_Tree):
-    global prenex
     _symbol_type = FOL_Tree.get_element_type()
     _symbol_value = FOL_Tree.get_element_value()
 
@@ -476,82 +581,12 @@ def prenex_check(FOL_Tree):
         return prenex_check(leftChild) and prenex_check(rightChild)
 
 def prenex_convert(FOL_Tree):
-    global prenex
+    currentNode = FOL_Tree
+    _symbol_type = FOL_Tree.get_element_type()
+    _symbol_value = FOL_Tree.get_element_value()
 
+    currChildren = FOL_Tree.get_child_nodes()
 
-    leftChild = currChildren[1]
-    leftChildType = leftChild.get_element_type()
-    leftChildChildren = leftChild.get_child_nodes()
-
-    leftChildLeft = leftChildChildren[1]
-    leftChildLeftType = leftChildLeft.get_element_type()
-
-    leftChildRight = leftChildChildren[0]
-    leftChildRightType = leftChildRight.get_element_type()
-
-
-
-    rightChild = currChildren[0]
-    rightChildType = rightChild.get_element_type()
-    rightChildChildren = rightChild.get_child_nodes()
-
-    rightChildLeft = rightChildChildren[1]
-    rightChildLeftType = rightChildLeft.get_element_type()
-
-    rightChildRight = rightChildChildren[0]
-    rightChildRightType = rightChildRight.get_element_type()
-
-
-    if leftChildType != "quant" and leftChildLeftType == "quant":
-        #left left is the issue
-        
-    elif leftChildType != "quant" and leftChildRightType == "quant":
-        #left right is the issue
-
-    elif rightChildType != "quant" and rightChildLeftType == "quant":
-        #right left is the issue
-
-    elif rightChildType != "quant" and rightChildRightType == "quant":
-        #right right is the issue
-        Temp = rightChild
-        TempChildren = Temp.get_child_nodes()
-        TempRight = TempChildren[0]
-
-        currChildren[0] = rightChildRight
-        set_child_nodes(currentNode, currChildren)
-
-        TempChildren[0] = rightChildRight
-        set_child_nodes(Temp, TempChildren)
-
-        rightChildChildren[0] = Temp
-        set_child_nodes(rightChild, rightChildChildren)
-
-        currChildren[0] = rightChild
-        set_child_nodes(currentNode, currChildren)
-        
-
-    else: #not what we're looking for, move on. 
-        for i in range(len(_child_nodes)):
-            prenex_convert(_child_nodes[i])
-    
-    prenex = True
-    return prenex_form(FOL_Tree) #checks it again since you can miss stuff first time around
-       
-        
-def skolemize(FOL_Tree):
-    return FOL_Tree
-def drop_universal(FOL_Tree):
-    return FOL_Tree
-def convert_CNF(FOL_Tree):
-    return FOL_Tree
-###################################################################################
-
-'''problems = [
-    ["(FORALL x (IMPLIES (P x) (Q x)))", "(P (f a))", "(NOT (Q (f a)))"],  # this is inconsistent
-    ["(FORALL x (IMPLIES (P x) (Q x)))", "(FORALL x (P x))", "(NOT (FORALL x (Q x)))"],  # this is inconsistent
-    ["(EXISTS x (AND (P x) (Q b)))", "(FORALL x (P x))"],  # this should NOT lead to an empty clause
-    ["(NOT (NOT (P a)))"],  # this should NOT lead to an empty clause
-=======
     if len(currChildren) != 2:
         return FOL_Tree
 
@@ -570,8 +605,6 @@ def convert_CNF(FOL_Tree):
         leftChildLeftType = leftChildLeft.get_element_type()
         leftChildLeftValue = leftChildLeft.get_element_value()
 
-        leftChildRight = leftChildChildren[0]
-
         tempType = currentNode.get_element_type()
         tempValue = currentNode.get_element_value()
 
@@ -579,18 +612,16 @@ def convert_CNF(FOL_Tree):
         leftChild.set_node(tempType, tempValue)
 
         temp = Node(leftChildLeftType, leftChildLeftValue)
-        leftChildLeft = leftChildRight
-        leftChildRight = rightChild
-        rightChild = leftChild
-        leftChild = temp
+        leftChild.get_child_nodes()[1] = leftChild.get_child_nodes()[0]
+        leftChild.get_child_nodes()[0] = currentNode.get_child_nodes()[0]
+        currentNode.get_child_nodes()[0] = currentNode.get_child_nodes()[1]
+        currentNode.get_child_nodes()[1] = temp
 
 
     elif _symbol_type == "op" and rightChildType == "quant": #Right subtree is the issue.
         rightChildLeft = rightChildChildren[1]
         rightChildLeftType = rightChildLeft.get_element_type()
         rightChildLeftValue = rightChildLeft.get_element_value()
-
-        rightChildRight = rightChildChildren[0]
 
         tempType = currentNode.get_element_type()
         tempValue = currentNode.get_element_value()
@@ -599,8 +630,8 @@ def convert_CNF(FOL_Tree):
         rightChild.set_node(tempType, tempValue)
 
         temp = Node(rightChildLeftType, rightChildLeftValue)
-        rightChildLeft = leftChild
-        leftChild = temp
+        rightChild.get_child_nodes()[1] = currentNode.get_child_nodes()[1]
+        currentNode.get_child_nodes()[1] = temp
 
     prenex_convert(leftChild)
     prenex_convert(rightChild)
@@ -643,9 +674,11 @@ def skolemize(FOL_Tree):
             rename(FOL_Tree, new_symbol_type, leftChildValue)
 
             currentNode.set_node(rightChildType, rightChildValue)
-            if len(rightChildChildren) == 2:
-                currChildren[1] = rightChildleft
-            currChildren[0] = rightChildRight
+            if len(rightChildChildren) == 1:
+                currChildren.pop(1)
+
+            for i in range(0, len(rightChildChildren)):
+                currChildren[i] = rightChildChildren[i]
             skolemize(currentNode)
             
         skolemize(currChildren[0])    
@@ -694,89 +727,359 @@ def drop_universal(FOL_Tree):
             rightChildValue = rightChild.get_element_value()
 
             rightChildChildren = rightChild.get_child_nodes()
-            if len(rightChildChildren) == 2:
-                rightChildleft = rightChildChildren[1]
-            rightChildRight = rightChildChildren[0]
 
-            FOL_Tree = currChildren[0]
-            drop_universal(FOL_Tree)
             currentNode.set_node(rightChildType, rightChildValue)
-            if len(rightChildChildren) == 2:
-                currChildren[1] = rightChildleft
-            currChildren[0] = rightChildRight
+            if len(rightChildChildren) == 1:
+                currChildren.pop(1)
+
+            for i in range(0, len(rightChildChildren)):
+                currChildren[i] = rightChildChildren[i]
 
             drop_universal(currentNode)
         
         drop_universal(currChildren[0])
         return FOL_Tree
+
+def symbol_fixer(FOL_Tree):
+    currentNode = FOL_Tree
+    if currentNode.get_element_type() == "variable":
+        if currentNode.get_element_value() not in universal_varList:
+            currentNode.set_node("symbol", currentNode.get_element_value())
+
+    if len(currentNode.get_child_nodes()) == 0:
+        return FOL_Tree
+
+    for i in range(0, len(currentNode.get_child_nodes())):
+        symbol_fixer(currentNode.get_child_nodes()[i])
+        
+    return FOL_Tree
+    
 ###################################################################################
 
-def convert_CNF(FOL_Tree): ##### STILL NEEDS TO BE DONE.
-    return FOL_Tree
+VARIABLE = "VARIABLE"
+CONSTANT = "CONSTANT"
 
 
-problems = [
+class Argument(object):
+    def __init__(self, name, kind):
+        self._name = name
+        self._kind = kind
+
+    def is_variable(self):
+        return self._kind == VARIABLE
+
+    def is_constant(self):
+        return self._kind == CONSTANT
+
+    def get_name(self):
+        return self._name
+
+    def set_name(self, name):
+        self._name = name
+
+    def same_kind(self, arg):
+        """
+        Check if the arguments is same
+        :param arg:
+        :return:
+        """
+        return self._kind == arg._kind
+
+    def equals(self, arg):
+        """
+        Checks if the arg and self are same argument
+        :param arg:
+        :return:
+        """
+        return (self.same_kind(arg) and self._name == arg._name)
+
+    @classmethod
+    def make_var(cls, name):
+        return Argument(name, VARIABLE)
+
+    @classmethod
+    def make_const(cls, name):
+        return Argument(name, CONSTANT)
+
+
+class Predicate(object):
+    """
+    Represents a predicate like P(x, y) or -P(x, y)
+    Order of the args and constants matters
+    For a predicate P(x, a, y)
+    Name: P, Args: x, a, y; x is a var, a is constant and y is a var
+    """
+    def __init__(self, name, args, negative=False):
+        """
+
+        :param name: string
+        :param args: Argument objects
+        :param negative: bool
+        """
+        self._name = name
+        self._args = args
+        self._negative = negative
+
+    def __str__(self):
+        s = "{0}({1})".format(self._name, ",".join([arg._name for arg in self._args]))
+        if self._negative:
+            return "-"+s
+
+        return s
+
+    def get_name(self):
+        return self._name
+
+    def get_args(self):
+        return self._args
+
+    def get_negative(self):
+        return self._negative
+
+    def same_formula(self, obj):
+        """
+        Checks whether the self and obj has the same for i.e. P(x,y)
+        has same form as P(x,y) and -P(x,y), or P(y, x), or P(a, x)
+        :param obj: Predicate()
+        :return: bool
+        """
+        if self._name != obj._name:
+            return False
+
+        if len(self._args) != len(obj._args):
+            return False
+
+        return True
+
+    def complement_of(self, obj):
+        """
+        Checks whether the
+        :param obj: Predicate()
+        :return:
+        """
+        return (self.same_formula(obj) and self._negative != obj._negative)
+
+    def same_args(self, obj):
+        """
+        Checks if the args in self and obj are same
+        :param obj: Predicate()
+        :return:
+        """
+        for i in range(0, len(obj._args)):
+            if not self._args[i].equals(obj._args[i]):
+                return False
+
+        return True
+
+    def equals(self, obj):
+        """
+        Return true if both objects are P(x,y) and P(x,y)
+        :param obj: Predicate()
+        :return:
+        """
+        if not self.same_formula(obj):
+            return False
+
+        if not self.same_args(obj):
+            return False
+
+        if self._negative != obj._negative:
+            return False
+
+        return True
+
+    def same_predicate(self, obj):
+
+        if self._name != obj._name:
+            return False
+
+        return True
+
+    def complement_of_predicate(self, obj):
+
+        if self.same_predicate(obj) == True and self._negative != obj._negative:
+            return True
+
+        return False
+
+
+def unification(p1, p2, replacements):
+    """
+    Takes a two predicates and tries for unifying them which are same, i.e. P(x1, y1) and -P(x1, y1)
+    returns None is couldn't be done else returns the list with unification, and,
+    a dict() with replacements
+    :param replacements:
+    :return: unifiable predicates, p1, p2 and bool if unification could be done or not
+    """
+    p1_args = list(p1.get_args())
+    p2_args = list(p2.get_args())
+
+    if len(p1_args) != len(p2_args):
+        return p1, p2, False
+
+    if p1.same_args(p2): # return as it is
+        return p1, p2, True
+
+    for i in range(0, len(p1_args)):
+        p1_arg = p1_args[i]
+        p2_arg = p2_args[i]
+
+        if p2_arg.equals(p1_arg):
+            continue
+
+        if p1_arg.is_variable() and p2_arg.is_variable():  # Replace p2 by p1
+            token = replacements.get(p2_arg.get_name(), '')
+            if token == '':
+                token = p1_arg.get_name()
+                replacements[p2_arg.get_name()] = token
+
+            p1_args[i].set_name(token)
+            p2_args[i].set_name(token)
+
+            continue
+
+        const = ''
+        var = ''
+        if p1_arg.is_constant() and p2_arg.is_variable():
+            const = p1_arg.get_name()
+            var = p2_arg.get_name()
+        else:
+            const = p2_arg.get_name()
+            var = p1_arg.get_name()
+
+        if '({0})'.format(const) in var: # can't to unification
+            return p1, p2, False
+
+        replacements[var] = const
+        p1_args[i].set_name(const)
+        p2_args[i].set_name(const)
+
+    p1._args = p1_args
+    p2._args = p2_args
+
+    return p1, p2, True
+
+
+def resolution(l):
+    if len(l) == 1:
+        return False
+    setofSupport = list(l)
+    fgh = list(l)
+    sizeFgh = len(fgh)
+    l.sort(key = len)
+    for (x, y) in enumerate(l):
+        refSet = l[x]
+        setofSupport.remove(refSet)
+        newClause = addNewClause(refSet,setofSupport)
+        if newClause ==None:
+            return False
+        elif len(newClause) ==0:
+            return True
+        else:
+            if newClause not in fgh:
+                fgh.append(setofSupport)
+
+    newFghSize = len(fgh)
+    if newFghSize > sizeFgh:
+        resolution(fgh)
+    return False
+
+
+def addNewClause(refSet,setofSupport):
+    newClause =[]
+    for (i, e) in enumerate(refSet):
+        setofSupport.sort(key=len)
+        for (j,k) in enumerate(setofSupport):
+            check = False
+            for(m,n) in enumerate(k):
+                if  e.complement_of_predicate(n) or check == True:
+                    check = True
+                    reps = dict()
+                    p1, p2, flag = unification(e, n, reps)
+                    if flag == True:
+                        n = p2
+                        e = p1
+                    else:
+                        continue
+            for (a,b) in enumerate(k):
+                if e.complement_of(b):
+                    newClause = (setofSupport[j])
+                    newClause.remove(b)
+                    for (c,d) in enumerate(refSet):
+                        if d==e:
+                            continue
+                        elif d in newClause:
+                            continue
+                        else:
+                            newClause.append(d)
+                    return newClause
+                else:
+                    continue
+
+    return None
+
+
+def get_args_from_nodes(nodes):
+    args = list()
+    for node in nodes:
+        if node.get_element_type() == 'function':
+            symbols = node.get_child_nodes()
+            arg_token = ','.join([x.get_element_value() for x in symbols])
+            const = '{0}({1})'.format(node.get_element_value(), arg_token)
+            args.append(Argument.make_const(const))
+            continue
+
+        if node.get_element_type() == 'symbol':
+            val = node.get_element_value()
+            args.append(Argument.make_const(val))
+            continue
+
+        if node.get_element_type() == 'variable':
+            val = node.get_element_value()
+            args.append(Argument.make_var(val))
+            continue
+
+    return args
+
+
+def and_to_clausal(and_node):
+    """
+    Recursively call to convert a CNF tree into the clauses
+    :param and_node:
+    :return: list of predicates
+    """
+    or_list = and_node.get_child_nodes()
+    clauses = list()
+    for r in or_list:
+        for node in r.get_child_nodes():
+            # there's only one predicate here, get that
+            if node.get_element_type() == 'op' and node.get_element_value() == 'NOT':
+                predicate = node.get_child_nodes()[0]
+                args = get_args_from_nodes(predicate.get_child_nodes())
+                p = Predicate(predicate.get_element_value(), args, True)
+                clauses.append(p)
+            else:
+                args = get_args_from_nodes(node.get_child_nodes())
+                p = Predicate(node.get_element_value(), args)
+                clauses.append(p)
+
+    return clauses
+
+test_cases = [
     ["(FORALL x (IMPLIES (p x) (q x)))", "(p (f a))", "(NOT (q (f a)))"],  # this is inconsistent
     ["(FORALL x (IMPLIES (p x) (q x)))", "(FORALL x (p x))", "(NOT (FORALL x (q x)))"],  # this is inconsistent
     ["(EXISTS x (AND (p x) (q b)))", "(FORALL x (p x))"],  # this should NOT lead to an empty clause
     ["(NOT (NOT (p a)))"],  # this should NOT lead to an empty clause
->>>>>>> 13b9292954c0bb5d2fc2ed004923aa2cdb193b83
     ["(big_f (f a b) (f b c))",
      "(big_f (f b c) (f a c))",
-     "(FORALL x (FORALL y (FORALL z (IMPLIES (AND (big_f x y) (big_f y z)) (big_f x z)))))",
-     "(NOT (big_f (f a b) (f a c)))"]  # this is inconsistent
+      "(FORALL x (FORALL y (FORALL z (IMPLIES (AND (big_f x y) (big_f y z)) (big_f x z)))))",
+      "(NOT (big_f (f a b) (f a c)))"], # this is inconsistent
+    ["(NOT (FORALL x (EXISTS y (AND (IMPLIES (p x) (NOT (NOT (q y)))) (FORALL w (EXISTS u (OR (s w u) (NOT (NOT (t w u))))))))))"],
+    ["(FORALL x (IMPLIES (AND (OR (EXISTS y (p y a b c)) (q a b)) (p x y)) (r x)))"],
+    ["(FORALL x (EXISTS y (EXISTS z (AND (AND (AND (AND (l x y) (l y z)) (r z)) (IMPLIES (p z) (r z))) (IMPLIES (r z) (p z))))))", "(FORALL x (FORALL y (FORALL z (AND (EXISTS x (FORALL y (NOT (AND (p y) (l x y))))) (IMPLIES (AND (l x y) (l y z)) (l x z))))))"],
+    ["(FORALL x (EXISTS y (p x y)))", "(EXISTS x (FORALL y (NOT (p x y))))"],
+    ["(FORALL x (OR (NOT (p a)) (q a)))", "(FORALL x (p x))", "(OR (NOT (p (f a))) (NOT (q a)))"],
+    ["(FORALL x (FORALL z (FORALL u (FORALL w (OR (p x (f x) z) (p u w w))))))", "(FORALL x (FORALL y (FORALL z (OR (NOT (p x y z)) (NOT (p z z z))))))"]
 ]
-<<<<<<< HEAD
-=======
-findIncSet(problems)
->>>>>>> 13b9292954c0bb5d2fc2ed004923aa2cdb193b83
 
-# ## conditional removal
-'''parse("(FORALL x (IMPLIES (P x) (Q x)))")
-
-## NNF
-parse("(NOT(AND p q))")
-parse("(NOT(OR p q))")
-parse("(NOT (FORALL x (f x)))")
-parse("(NOT (EXISTS y (f y)))")
-
-# standardize variables
-parse("(OR (EXISTS x (f x)) (FORALL x (f x)))")
-parse("(FORALL y (IMPLIES (FORALL x (FORALL y (P x y))) (EXISTS x (R x y))))")
-
-parse("(P (f x y))")
-
-parse("(FORALL X (FORALL Y (FORALL Z (IMPLIES (AND (big_f X Y) (big_f Y Z)) (big_f X Z)))))")
-
-
-parse("(FORALL x (P x))")
-for problem in problems:
-    for p in problem:
-        parse(p)
-        print("\n==============\n")
-
-'''
-parse("(NOT (FORALL x (EXISTS y (IMPLIES (p x y) (AND (FORALL y (EXISTS z (NOT (q x z)))) (FORALL y (NOT (FORALL z (r y z)))))))))")
-=======
-
-'''
-
-'''
-test = "(FORALL x (EXISTS y (p x y)))"
-parsed = parse(test)
-full_parse = parse_tree(parsed)
-reconnect = recorrect(full_parse)
-print(reconnect)
-skolemized = skolemize(reconnect)
-print(skolemized)
-print("Done")
-
-test = "(FORALL y (FORALL x (p x y)))"
-parsed = parse(test)
-full_parse = parse_tree(parsed)
-reconnect = recorrect(full_parse)
-print(reconnect)
-drop = drop_universal(reconnect)
-print(drop)
-print("Done")'''
-
+print(findIncSet(test_cases))
